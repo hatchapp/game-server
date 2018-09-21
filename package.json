@@ -1,0 +1,22 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "A backend for the hatch app that lets you play story telling with friends with emojis",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "hatch",
+    "the",
+    "game",
+    "backend",
+    "socket.io",
+    "redis"
+  ],
+  "author": "Yengas",
+  "license": "ISC",
+  "dependencies": {
+    "socket.io": "^2.1.1"
+  }
+}
