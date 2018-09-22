@@ -16,6 +16,8 @@ module.exports = {
 		USER_DISCONNECTED: 'user_disconnect',
 		ANOTHER_USER_CONNECTED: 'another_user_connected',
 		LEADERBOARD_UPDATE: 'leaderboard_update',
+		SAY: 'say',
+		TELL: 'tell',
 	},
 	ANSWERS: ['geyik', 'kuzuların sessizliği', 'yerli malı', 'yahşi batı'],
 };

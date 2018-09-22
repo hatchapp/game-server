@@ -20,9 +20,9 @@ const socket = socketio(`http://localhost:${config.port}`, {
 const interface = readline.createInterface(process.stdin);
 
 interface.on('line', (line) => {
-	const answerData = { answer: line, date: Date.now() };
-	logger.info({ data: answerData }, 'answer sent');
-	socket.emit(EVENTS.ANSWER, answerData);
+	const sayData = { say: line, date: Date.now() };
+	logger.info({ data: sayData }, 'sent say');
+	socket.emit(EVENTS.SAY, sayData);
 });
 
 interface.on('close', () => logger.info('closed'));

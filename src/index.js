@@ -77,7 +77,7 @@ function addLeaderboardPoints(room, user, points){
 
 async function processLeaderboardAddPoints(room, user, points){
 	const leaderboard = addLeaderboardPoints(room, user, points);
-	io.to(room.roomId).emit(EVENTS.LEADERBOARD_UPDATE, leaderboard);
+	io.to(room.roomId).emit(EVENTS.LEADERBOARD_UPDATE, { leaderboard, user });
 	return leaderboard;
 }
 
@@ -88,6 +88,7 @@ function setRoundStart(room, teller, answer){
 		answer,
 		teller: teller.id
 	};
+	room.users.forEach(user => user.hatch = HATCH_LIMIT);
 }
 
 async function processRoundStart(room, userToTell, answerToTell){
@@ -97,13 +98,18 @@ async function processRoundStart(room, userToTell, answerToTell){
 	io.to(userToTell.id).emit(EVENTS.TELL_ANSWER, { answer: answerToTell });
 }
 
+async function startNewRound(room){
+	const userToTell = pickTeller(room);
+	const answerToTell = pickAnswer();
+
+	await processRoundStart(room, userToTell, answerToTell);
+	await processLeaderboardAddPoints(room, userToTell, 5);
+	return { userToTell, answerToTell, room };
+}
+
 async function processUserJoinEvent(room, user){
 	if(room.state === GAME_STATE.IDLE && room.users.length === 2){
-		const userToTell = pickTeller(room);
-		const answerToTell = pickAnswer();
-
-		await processRoundStart(room, userToTell, answerToTell);
-		await processLeaderboardAddPoints(room, userToTell, 5);
+		await startNewRound(room);
 		return { new: true };
 	}
 	return { new: false };
@@ -111,16 +117,27 @@ async function processUserJoinEvent(room, user){
 
 async function processUserDisconnectEvent(room, user){
 	if(room.state === GAME_STATE.ROUND_IN_PROGRESS){
-
 		if(room.users.length === 0){
-			// remove the game
-			return {};
+			delete games[room.roomId];
 		}else if(room.users.length === 1){
-			// pause the round
-			return {};
+			await processRoundFinished(room);
 		}
 	}
 	return {};
+}
+
+function setRoomIdle(room){
+	room.state = GAME_STATE.IDLE;
+	room.roundState = { answer: null, teller: null };
+	return room;
+}
+
+async function startNewRoundIfCan(room){
+	if(room.users.length > 1){
+		return startNewRound(room);
+	}
+	room = setRoomIdle(room);
+	return { room };
 }
 
 function setRoomRoundFinished(room){
@@ -132,11 +149,15 @@ function setRoomRoundFinished(room){
 async function processRoundFinished(room){
 	room = setRoomRoundFinished(room);
 	io.to(room.roomId).emit(EVENTS.ROUND_END, {});
+	setTimeout(async function(){
+		await startNewRoundIfCan(room);
+	}, config.game.round.restart);
 }
 
 async function processRightAnswerEvent(room, winner){
-	await processRoundFinished(room);
 	await processLeaderboardAddPoints(room, winner, Math.max(winner.hatch, 0));
+	io.to(room.roomId).emit(EVENTS.RIGHT_ANSWER, { room, winner });
+	await processRoundFinished(room);
 }
 
 function decreaseHatch(user){
@@ -160,15 +181,23 @@ async function processHatchDecreaseEvent(room, user){
 }
 
 async function processUserAnswerEvent(room, user, answer){
-	const userSocket = io.sockets.connected[user.id];
+	io.to(room.roomId).emit(EVENTS.ANSWER, { user, answer, date: Date.now() });
+	if(answer.toLowerCase() === room.roundState.answer.toLowerCase()){
+		await processRightAnswerEvent(room, user);
+	}else{
+		await processHatchDecreaseEvent(room, user);
+	}
+}
 
-	if(room.state === GAME_STATE.ROUND_IN_PROGRESS && user.id !== room.roundState.teller){
-		userSocket.broadcast.to(room.roomId).emit(EVENTS.ANSWER, { user, answer, date: Date.now() });
-		if(answer.toLowerCase() === room.roundState.answer.toLowerCase()){
-			await processRightAnswerEvent(room, user);
-		}else{
-			await processHatchDecreaseEvent(room, user);
-		}
+async function processUserTellEvent(room, user, say){
+	io.to(room.roomId).emit(EVENTS.TELL, { user, say, date: Date.now() });
+}
+
+async function processUserSayEvent(room, user, say){
+	if(room.state === GAME_STATE.ROUND_IN_PROGRESS && user.id !== room.roundState.teller) {
+		await processUserAnswerEvent(room, user, say);
+	}else if(room.state === GAME_STATE.ROUND_IN_PROGRESS && user.id === room.roundState.teller){
+		await processUserTellEvent(room, user, say);
 	}
 }
 
@@ -193,9 +222,9 @@ io.on('connection', async function (socket) {
 	socket.emit(EVENTS.CONNECTED, { room, user });
 	socket.broadcast.to(roomId).emit(EVENTS.ANOTHER_USER_CONNECTED, { room, user });
 
-	socket.on(EVENTS.ANSWER, async ({ answer }) => {
-		logger.info({ id: socket.id, answer }, 'got answer from');
-		await processUserAnswerEvent(room, user, answer);
+	socket.on(EVENTS.SAY, async ({ say }) => {
+		logger.info({ id: socket.id, say }, 'got say from');
+		await processUserSayEvent(room, user, say);
 	});
 
 	socket.on('disconnect', async () => {
