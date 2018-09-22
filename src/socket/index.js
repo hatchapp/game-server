@@ -13,10 +13,6 @@ module.exports = function(port){
 	const io = socketio(server);
 	const socket$ = new Subject();
 
-	server.listen(port, () => {
-		// emit server listening event
-	});
-
 	io.on('connection', async function (socket) {
 		socket$.next(socket);
 	});
@@ -26,6 +22,7 @@ module.exports = function(port){
 		target.on('close', () => socket$.complete());
 	});
 
+	server.listen(port);
 	return socket$;
 };
 

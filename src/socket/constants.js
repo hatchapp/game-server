@@ -1,6 +1,7 @@
 module.exports = {
 	EVENTS: {
-		CONNECTED: 'connected',
+		ROOM_CONNECTED: 'room_connected',
+		ROOM_CHANGE: 'room_change',
 		HATCH_STATUS: 'hatch',
 		ANSWER: 'answer',
 		TELL_ANSWER: 'tell_answer',

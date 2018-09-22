@@ -1,7 +1,7 @@
 const { Observable } = require('rxjs');
 const { map, filter } = require('rxjs/operators');
 const { EVENTS } = require('./constants');
-const { ActionTypes } = require('../game/constants');
+const { ActionTypes } = require('../room/constants');
 
 function createEventToActionMapper({ id }){
 	return {
@@ -80,11 +80,9 @@ function createEmitStream(gameAction$, gameState$, actionToEmitMapper){
 	);
 }
 
-module.exports = function(socket){
-	const { id } = socket;
-	const config = { id };
-	const eventToActionMapper = createEventToActionMapper(config);
-	const actionToEmitMapper = createActionToEmitMapper(config);
+module.exports = function(socket, auth){
+	const eventToActionMapper = createEventToActionMapper(auth);
+	const actionToEmitMapper = createActionToEmitMapper(auth);
 	/**
 	 * Given game action/state streams, and dispatch function
 	 * Connects the user socket to the game. You can use unsubscribe
@@ -92,24 +90,27 @@ module.exports = function(socket){
 	 * @param gameAction$
 	 * @param gameState$
 	 * @param gameDispatch
-	 * @returns {{unsubscribe: Function}}
+	 * @returns {Observable<*>}
 	 */
 	function register(gameAction$, gameState$, gameDispatch){
-		const action$ = createActionStream(socket, eventToActionMapper);
-		const emit$ = createEmitStream(gameAction$, gameState$, actionToEmitMapper);
+		return new Observable(() => {
+			const action$ = createActionStream(socket, eventToActionMapper);
+			const emit$ = createEmitStream(gameAction$, gameState$, actionToEmitMapper);
 
-		// send each action created by the socket events to the game store
-		const actionSub = action$.subscribe(action => gameDispatch(action));
-		// send each emit created by the game store to socket
-		const emitSub = emit$.subscribe(({ event, data }) => socket.emit(event, data));
+			// send each action created by the socket events to the game store
+			const actionSub = action$.subscribe(action => gameDispatch(action));
+			// send each emit created by the game store to socket
+			const emitSub = emit$.subscribe(({ event, data }) => socket.emit(event, data));
 
-		// stop listening to all events/actions
-		function unsubscribe(){
-			emitSub.unsubscribe();
-			actionSub.unsubscribe();
-		}
-
-		return { unsubscribe };
+			return function unsubscribe(){
+				// send disconnect action if there is a definition for it, the room is left
+				const disconnectAction = eventToActionMapper['disconnect']();
+				if(disconnectAction) gameDispatch(disconnectAction);
+				// stop listening to all events/actions
+				emitSub.unsubscribe();
+				actionSub.unsubscribe();
+			}
+		});
 	}
 
 	return { register };
