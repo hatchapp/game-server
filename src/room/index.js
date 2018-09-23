@@ -12,7 +12,7 @@ module.exports = function(id, initialState){
 		return NEVER;
 	}
 
-	const roomEpic = roomEpicCreator(id);
+	const roomEpic = roomEpicCreator({ id });
 	const epicMiddleware = createEpicMiddleware();
 	const rootEpic = combineEpics(roomEpic, stealMiddleware);
 	const store = createStore(
