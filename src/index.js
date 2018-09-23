@@ -1,5 +1,5 @@
 const { fromEvent, from } = require('rxjs');
-const { catchError, distinctUntilChanged, mergeMap, startWith, switchMap } = require('rxjs/operators');
+const { catchError, distinctUntilChanged, mergeMap, startWith, switchMap, takeUntil } = require('rxjs/operators');
 const bunyan = require('bunyan');
 const config = require('./config');
 const logger = bunyan.createLogger({ name: config.name });
@@ -16,6 +16,7 @@ const service$ = socket$.pipe(
 		logger.info({ auth, roomId }, 'got socket');
 		const mapper = socketMapper(socket, auth);
 		const changeMap$ = fromEvent(socket, EVENTS.ROOM_CHANGE);
+		const disconnect$ = fromEvent(socket, 'disconnect');
 
 		return changeMap$.pipe(
 			startWith(roomId),
@@ -23,7 +24,8 @@ const service$ = socket$.pipe(
 			// for each room change event, re-register to the room/game
 			switchMap((roomId) => {
 				return from(lobby.getOrCreateRoom(roomId)).pipe(
-					mergeMap(({ action$, state$, dispatch }) => mapper.register(action$, state$, dispatch))
+					mergeMap(({ action$, state$, dispatch }) => mapper.register(action$, state$, dispatch)),
+					takeUntil(disconnect$)
 				);
 			}),
 			catchError((err) => logger.error(err, 'an error happened in socket mapping'))
