@@ -20,7 +20,16 @@ function createActionToEmitMapper({ id }){
 		[ActionTypes.USER_CONNECTED]: (data) => of(data).pipe(
 			filter(({ user }) => user.id !== id),
 			map((data) => ({ event: EVENTS.ANOTHER_USER_CONNECTED, data }))
-		)
+		),
+		// say messages should be broadcast to all users
+		[ActionTypes.SOCKET_USER_SAY]: ({ userId, message, time }, state) => {
+			const isTeller = state.getIn(['roundState', 'teller']) === userId;
+
+			return {
+				event: isTeller ? EVENTS.TELL : EVENTS.ANSWER,
+				data: { userId, time, [isTeller ? 'tell' : 'answer']: message },
+			};
+		},
 	};
 }
 
