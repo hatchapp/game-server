@@ -1,9 +1,19 @@
 const { ActionTypes } = require('./constants');
 
-function createUserConnected(userId){
-	return { type: ActionTypes.USER_CONNECTED, payload: { userId } };
+function createSocketUserConnected(userId){
+	return { type: ActionTypes.SOCKET_USER_CONNECTED, payload: { userId } };
+}
+
+function createSocketUserSay(userId, message, time){
+	return { type: ActionTypes.SOCKET_USER_SAY, payload: { userId, message, time } };
+}
+
+function createSocketUserDisconnected(userId){
+	return { type: ActionTypes.SOCKET_USER_DISCONNECTED, payload: { userId } };
 }
 
 module.exports = {
-	createUserConnected,
+	createSocketUserConnected,
+	createSocketUserSay,
+	createSocketUserDisconnected,
 };

@@ -2,20 +2,20 @@ const { Observable } = require('rxjs');
 const { map, filter } = require('rxjs/operators');
 const { EVENTS } = require('./constants');
 const { ActionTypes } = require('../room/constants');
-const { createUserConnected } = require('../room/actions');
+const roomActions = require('../room/actions');
 
 function createEventToActionMapper({ id }){
 	return {
-		'register': () => createUserConnected(id),
-		'disconnect': () => null,
-		[EVENTS.SAY]: ({ say, date }) => null,
+		'register': () => roomActions.createSocketUserConnected(id),
+		'disconnect': () => roomActions.createSocketUserDisconnected(id),
+		[EVENTS.SAY]: ({ say, date }) => roomActions.createSocketUserSay(id, say, date),
 	};
 }
 
 function createActionToEmitMapper({ id }){
 	return {
 		// simple example of emitting socket events on game actions
-		[ActionTypes.USER_CONNECTED]: ({ userId }, state) => (
+		[ActionTypes.SOCKET_USER_CONNECTED]: ({ userId }, state) => (
 			userId !== id ? { event: EVENTS.ANOTHER_USER_CONNECTED, data: { userId } } : null
 		)
 	};
