@@ -5,5 +5,5 @@ module.exports = {
 			restart: 5000,
 		},
 	},
-	port: process.env.LISTEN_PORT || 8080
+	port: process.env.LISTEN_PORT || 8081
 };
