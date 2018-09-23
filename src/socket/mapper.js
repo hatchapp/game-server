@@ -15,8 +15,8 @@ function createEventToActionMapper({ id }){
 function createActionToEmitMapper({ id }){
 	return {
 		// simple example of emitting socket events on game actions
-		[ActionTypes.SOCKET_USER_CONNECTED]: ({ userId }, state) => (
-			userId !== id ? { event: EVENTS.ANOTHER_USER_CONNECTED, data: { userId } } : null
+		[ActionTypes.USER_CONNECTED]: ({ user }, state) => (
+			user.id !== id ? { event: EVENTS.ANOTHER_USER_CONNECTED, data: { user } } : null
 		)
 	};
 }
