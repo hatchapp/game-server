@@ -19,6 +19,7 @@
   "dependencies": {
     "bunyan": "^1.8.12",
     "express": "^4.16.3",
+    "immutable": "^3.8.2",
     "redux": "^4.0.0",
     "redux-observable": "^1.0.0",
     "rxjs": "^6.3.2",
