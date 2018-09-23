@@ -20,10 +20,35 @@ function createUserConnected(user){
 	return { type: ActionTypes.USER_CONNECTED, payload: { user } };
 }
 
+function createRoundStartRequest(){
+	return { type: ActionTypes.ROUND_START_REQUEST };
+}
+
+function createRoundStartSuccess(answer, teller){
+	return { type: ActionTypes.ROUND_START_SUCCESS, payload: { answer, teller } };
+}
+
+function createRoundStartFailed(){
+	return { type: ActionTypes.ROUND_START_FAILED };
+}
+
+function createHaveEnoughPlayers(){
+	return { type: ActionTypes.HAVE_ENOUGH_PLAYERS };
+}
+
+function createRoundEndRequest(){
+	return { type: ActionTypes.ROUND_END_REQUEST };
+}
+
 module.exports = {
 	createSocketUserConnected,
 	createSocketUserSay,
 	createSocketUserDisconnected,
 	createRoomInitWithId,
 	createUserConnected,
+	createRoundStartRequest,
+	createRoundStartSuccess,
+	createRoundStartFailed,
+	createHaveEnoughPlayers,
+	createRoundEndRequest,
 };

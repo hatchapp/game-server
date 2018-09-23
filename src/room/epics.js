@@ -1,8 +1,8 @@
-const { of, NEVER } = require('rxjs');
-const { map } = require('rxjs/operators');
+const { merge, NEVER, of, throwError } = require('rxjs');
+const { catchError, delay, filter, map, switchMap, takeUntil, withLatestFrom } = require('rxjs/operators');
 const { combineEpics, ofType } = require('redux-observable');
 const actions = require('./actions');
-const { ActionTypes } = require('./constants');
+const { ActionTypes, Answers, GameState } = require('./constants');
 
 function createUser(id, hatchLimit) {
 	return {
@@ -13,7 +13,31 @@ function createUser(id, hatchLimit) {
 	};
 }
 
-module.exports = function({ id, gameConfig: { HATCH_LIMIT = 20 } = {} }){
+function pickTeller(users){
+	return users[Math.floor(Math.random() * users.length)];
+}
+
+function pickAnswer(){
+	return Answers[Math.floor(Math.random() * Answers.length)];
+}
+
+function createNewRoundAction(state){
+	return actions.createRoundStartSuccess(
+		pickAnswer(),
+		pickTeller(state.get('users').keySeq().toArray())
+	);
+}
+
+module.exports = function({
+      id,
+	  gameConfig: {
+      	  HATCH_LIMIT = 20,
+		  ROUND_PLAY_TIME = 90000,
+		  ROUND_RESTART_TIME = 5000,
+		  NOT_ENOUGH_PLAYERS_ROUND_END_TIMEOUT = 5000,
+		  ENOUGH_PLAYER_COUNT = 2,
+      } = {}
+} = {}){
 	function log(action$, state$){
 		action$.subscribe((action) => console.log(JSON.stringify({ action, time: Date.now() })));
 		state$.subscribe((state) => console.log(JSON.stringify({ state, time: Date.now() })));
@@ -24,6 +48,15 @@ module.exports = function({ id, gameConfig: { HATCH_LIMIT = 20 } = {} }){
 	// init the game
 	function init(){
 		return of(actions.createRoomInitWithId(id, Date.now()));
+	}
+
+	function haveEnoughPlayers(action$, state$){
+		return action$.pipe(
+			ofType(ActionTypes.SOCKET_USER_CONNECTED),
+			withLatestFrom(state$),
+			filter(([_, state]) => state.get('users').size === ENOUGH_PLAYER_COUNT),
+			map(() => actions.createHaveEnoughPlayers())
+		);
 	}
 
 	// when a socket user is connected, create a user, emit user connected action
@@ -38,9 +71,81 @@ module.exports = function({ id, gameConfig: { HATCH_LIMIT = 20 } = {} }){
 		);
 	}
 
+	// send round start request when there are enough players and the game state is idle
+	function roundStartWhenUsersJoin(action$, state$){
+		return action$.pipe(
+			ofType(ActionTypes.HAVE_ENOUGH_PLAYERS),
+			withLatestFrom(state$),
+			// if there are enough users, and the game state is idle
+			filter(([_, state]) => state.get('state') === GameState.IDLE),
+			map(() => actions.createRoundStartRequest())
+		);
+	}
+
+	// start the round if we can, when the
+	function roundStart(action$, state$){
+		return action$.pipe(
+			ofType(ActionTypes.ROUND_START_REQUEST),
+			withLatestFrom(state$),
+			filter(([_, state]) => {
+				if(state.get('state') !== GameState.IDLE)
+					return throwError(new Error('can not start a round when the game is not idle'));
+				if(state.get('users').size <= 1)
+					return throwError(new Error('you need at least one person to start a game'));
+				return true;
+			}),
+			map(([_, state]) => createNewRoundAction(state)),
+			catchError((err) => actions.createRoundStartFailed())
+		);
+	}
+
+	// stop the round when there are not enough players to play, or round time is finished
+	function roundEndRequest(action$, state$){
+		const gameEnd$ = action$.pipe(
+			ofType(ActionTypes.ROUND_START_SUCCESS),
+			// we need to end the round after enough time has passed
+			switchMap(() => of(null).pipe(
+				// wait game end time
+				delay(ROUND_PLAY_TIME),
+				// cancel if a new round starts
+				takeUntil(action$.pipe(ofType(ActionTypes.ROUND_END_SUCCESS))),
+			)),
+		);
+		const notEnoughPlayers$ = action$.pipe(
+			ofType(ActionTypes.USER_DISCONNECTED),
+			withLatestFrom(state$),
+			// if the user drops to 1, we need to send round end request,
+			filter(([_, state]) => state.get('users').size === 1),
+			switchMap(() => of(null).pipe(
+				// give some chance because the room may get new connections
+				delay(NOT_ENOUGH_PLAYERS_ROUND_END_TIMEOUT),
+				// if we got enough time before the delay, cancel
+				takeUntil(action$.pipe(ofType(ActionTypes.HAVE_ENOUGH_PLAYERS))),
+			))
+		);
+
+		return merge(gameEnd$, notEnoughPlayers$).pipe(
+			map(() => actions.createRoundEndRequest())
+		);
+	}
+
+	// try to start a new round after the game ends
+	function restartRoundAfterRoundEnd(action$){
+		return action$.pipe(
+			ofType(ActionTypes.ROUND_END_SUCCESS),
+			delay(ROUND_RESTART_TIME),
+			map(() => actions.createRoundStartRequest())
+		);
+	}
+
 	return combineEpics(
 		log,
 		init,
 		userConnected,
+		roundStartWhenUsersJoin,
+		roundStart,
+		restartRoundAfterRoundEnd,
+		roundEndRequest,
+		haveEnoughPlayers,
 	);
 };
