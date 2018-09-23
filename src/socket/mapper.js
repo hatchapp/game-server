@@ -2,16 +2,22 @@ const { Observable } = require('rxjs');
 const { map, filter } = require('rxjs/operators');
 const { EVENTS } = require('./constants');
 const { ActionTypes } = require('../room/constants');
+const { createUserConnected } = require('../room/actions');
 
 function createEventToActionMapper({ id }){
 	return {
-		[EVENTS.SAY]: ({ say, date }) => ({}),
+		'register': () => createUserConnected(id),
+		'disconnect': () => null,
+		[EVENTS.SAY]: ({ say, date }) => null,
 	};
 }
 
 function createActionToEmitMapper({ id }){
 	return {
-		[ActionTypes.X]: ({ type, payload }, state) => ({})
+		// simple example of emitting socket events on game actions
+		[ActionTypes.USER_CONNECTED]: ({ userId }, state) => (
+			userId !== id ? { event: EVENTS.ANOTHER_USER_CONNECTED, data: { userId } } : null
+		)
 	};
 }
 
@@ -75,7 +81,7 @@ function createEmitStream(gameAction$, gameState$, actionToEmitMapper){
 
 	return gameAction$.pipe(
 		filter(({ type }) => actionTypes.includes(type)),
-		map((action) => actionToEmitMapper[action.type]()),
+		map((action) => actionToEmitMapper[action.type](action.payload)),
 		filter(x => x)
 	);
 }
@@ -101,6 +107,10 @@ module.exports = function(socket, auth){
 			const actionSub = action$.subscribe(action => gameDispatch(action));
 			// send each emit created by the game store to socket
 			const emitSub = emit$.subscribe(({ event, data }) => socket.emit(event, data));
+
+			// if there is a register action, send it
+			const registerAction = eventToActionMapper['register']();
+			if(registerAction) gameDispatch(registerAction);
 
 			return function unsubscribe(){
 				// send disconnect action if there is a definition for it, the room is left
