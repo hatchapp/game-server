@@ -40,6 +40,22 @@ function createRoundEndRequest(){
 	return { type: ActionTypes.ROUND_END_REQUEST };
 }
 
+function createRoundEndSuccess(){
+	return { type: ActionTypes.ROUND_END_SUCCESS };
+}
+
+function createRoundEndFailed(){
+	return { type: ActionTypes.ROUND_END_FAILED };
+}
+
+function createUserDisconnected(userId){
+	return { type: ActionTypes.USER_DISCONNECTED, payload: { userId } };
+}
+
+function createRoundEndStateWaitCompleted(){
+	return { type: ActionTypes.ROUND_END_STATE_WAIT_COMPLETED };
+}
+
 module.exports = {
 	createSocketUserConnected,
 	createSocketUserSay,
@@ -51,4 +67,8 @@ module.exports = {
 	createRoundStartFailed,
 	createHaveEnoughPlayers,
 	createRoundEndRequest,
+	createRoundEndSuccess,
+	createRoundEndFailed,
+	createUserDisconnected,
+	createRoundEndStateWaitCompleted,
 };

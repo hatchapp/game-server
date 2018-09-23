@@ -1,5 +1,5 @@
-const { merge, NEVER, of, throwError } = require('rxjs');
-const { catchError, delay, filter, map, switchMap, takeUntil, withLatestFrom } = require('rxjs/operators');
+const { from, merge, NEVER, of, throwError } = require('rxjs');
+const { catchError, delay, filter, map, mergeMap, switchMap, takeUntil, withLatestFrom } = require('rxjs/operators');
 const { combineEpics, ofType } = require('redux-observable');
 const actions = require('./actions');
 const { ActionTypes, Answers, GameState } = require('./constants');
@@ -71,6 +71,14 @@ module.exports = function({
 		);
 	}
 
+	// when a socket  user is disconnected from the server
+	function userDisconnected(action$){
+		return action$.pipe(
+			ofType(ActionTypes.SOCKET_USER_DISCONNECTED),
+			map(({ payload: { userId} }) => actions.createUserDisconnected(userId))
+		);
+	}
+
 	// send round start request when there are enough players and the game state is idle
 	function roundStartWhenUsersJoin(action$, state$){
 		return action$.pipe(
@@ -87,15 +95,16 @@ module.exports = function({
 		return action$.pipe(
 			ofType(ActionTypes.ROUND_START_REQUEST),
 			withLatestFrom(state$),
-			filter(([_, state]) => {
-				if(state.get('state') !== GameState.IDLE)
-					return throwError(new Error('can not start a round when the game is not idle'));
-				if(state.get('users').size <= 1)
-					return throwError(new Error('you need at least one person to start a game'));
-				return true;
-			}),
-			map(([_, state]) => createNewRoundAction(state)),
-			catchError((err) => actions.createRoundStartFailed())
+			mergeMap((result) => of(result).pipe(
+				mergeMap(([_, state]) => {
+					if(state.get('state') !== GameState.IDLE)
+						return throwError(new Error('can not start a round when the game is not idle'));
+					if(state.get('users').size <= 1)
+						return throwError(new Error('you need at least one person to start a game'));
+					return of(createNewRoundAction(state));
+				}),
+				catchError((err) => of(actions.createRoundStartFailed()))
+			))
 		);
 	}
 
@@ -129,12 +138,31 @@ module.exports = function({
 		);
 	}
 
+	// end the round when the round end request comes
+	function roundEnd(action$, state$){
+		return action$.pipe(
+			ofType(ActionTypes.ROUND_END_REQUEST),
+			withLatestFrom(state$),
+			mergeMap((result) => of(result).pipe(
+				mergeMap(([_, state]) => {
+					if(state.get('state') !== GameState.ROUND_IN_PROGRESS)
+						return throwError(new Error('can not end a round when the game is not round in progress state'));
+					return of(actions.createRoundEndSuccess());
+				}),
+				catchError((err) => of(actions.createRoundEndFailed()))
+			))
+		);
+	}
+
 	// try to start a new round after the game ends
 	function restartRoundAfterRoundEnd(action$){
 		return action$.pipe(
 			ofType(ActionTypes.ROUND_END_SUCCESS),
 			delay(ROUND_RESTART_TIME),
-			map(() => actions.createRoundStartRequest())
+			mergeMap(() => from([
+				actions.createRoundEndStateWaitCompleted(),
+				actions.createRoundStartRequest()
+			]))
 		);
 	}
 
@@ -146,6 +174,8 @@ module.exports = function({
 		roundStart,
 		restartRoundAfterRoundEnd,
 		roundEndRequest,
+		roundEnd,
 		haveEnoughPlayers,
+		userDisconnected,
 	);
 };
