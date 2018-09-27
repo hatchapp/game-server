@@ -14,13 +14,34 @@ function createEventToActionMapper({ id }){
 	};
 }
 
+function formatRoomState(room){
+	const {
+		id, state, round, roundState: { teller }, users,
+		leaderboard, foundRight, createdAt,
+		lastRoundStartedAt, lastRoundEndedAt
+	} = room;
+
+	return {
+		id, state, round, teller, createdAt, lastRoundStartedAt, lastRoundEndedAt,
+		users, leaderboard, foundRight
+	};
+}
+
 function createActionToEmitMapper({ id }){
 	return {
 		// simple example of emitting socket events on game actions
-		[ActionTypes.USER_CONNECTED]: (data) => of(data).pipe(
-			filter(({ user }) => user.get('id') !== id),
-			map((data) => ({ event: EVENTS.ANOTHER_USER_CONNECTED, data }))
-		),
+		[ActionTypes.USER_CONNECTED]: (data, state) => {
+			const { user } = data;
+
+			if(user.get('id') !== id){
+				return { event: EVENTS.ANOTHER_USER_CONNECTED, data };
+			}else{
+				return {
+					event: EVENTS.ROOM_CONNECTED,
+					data: { room: formatRoomState(state.toJS()) }
+				};
+			}
+		},
 		// say messages should be broadcast to all users
 		[ActionTypes.SOCKET_USER_SAY]: ({ userId, message, time }, state) => {
 			const isTeller = state.getIn(['roundState', 'teller']) === userId;
@@ -30,6 +51,32 @@ function createActionToEmitMapper({ id }){
 				data: { userId, time, [isTeller ? 'tell' : 'answer']: message },
 			};
 		},
+		[ActionTypes.USER_HATCH_PERCENTAGE]: ({ userId, hatchPercentage }) => ({
+			event: EVENTS.HATCH_STATUS,
+			data: { userId, hatchPercentage },
+		}),
+		[ActionTypes.USER_DISCONNECTED]: ({ userId }) => ({
+			event: EVENTS.USER_DISCONNECTED,
+			data: { userId }
+		}),
+		[ActionTypes.ROUND_START_SUCCESS]: (_, state) => {
+			const teller = state.getIn(['roundState', 'teller']);
+			const answer = state.getIn(['roundState', 'answer']);
+
+			return [
+				{ event: EVENTS.ROUND_START },
+				...(teller === id ? [{ event: EVENTS.TELL_ANSWER, data: { answer } }] : [])
+			];
+		},
+		[ActionTypes.ROUND_END_SUCCESS]: () => ({ event: EVENTS.ROUND_END }),
+		[ActionTypes.LEADERBOARD_UPDATE]: (_, state) => ({
+			event: EVENTS.LEADERBOARD_UPDATE,
+			data: { leaderboard: state.get('leaderboard').toJS() },
+		}),
+		[ActionTypes.RIGHT_ANSWER_FOUND]: ({ userId }) => ({
+			event: EVENTS.RIGHT_ANSWER,
+			data: { userId }
+		}),
 	};
 }
 
