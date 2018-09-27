@@ -1,16 +1,17 @@
+const { Map } = require('immutable');
 const { from, merge, NEVER, of, throwError } = require('rxjs');
-const { catchError, delay, filter, map, mergeMap, switchMap, takeUntil, withLatestFrom } = require('rxjs/operators');
+const { catchError, delay, distinct, filter, map, mergeMap, switchMap, takeUntil, withLatestFrom } = require('rxjs/operators');
 const { combineEpics, ofType } = require('redux-observable');
 const actions = require('./actions');
 const { ActionTypes, Answers, GameState } = require('./constants');
 
 function createUser(id, hatchLimit) {
-	return {
+	return Map({
 		id,
 		name: `user#${Math.floor(Math.random() * 1000000)}`,
 		createdAt: Date.now(),
 		hatch: hatchLimit,
-	};
+	});
 }
 
 function pickTeller(users){
@@ -28,6 +29,16 @@ function createNewRoundAction(state){
 	);
 }
 
+function createUserRightAnswerAddPointsAction(user){
+	const points = user.get('hatch');
+
+	return actions.createAddUserLeaderboardPoints(user.get('id'), Math.max(points, 0));
+}
+
+function checkAnswer(message, answer){
+	return message === answer;
+}
+
 module.exports = function({
       id,
 	  gameConfig: {
@@ -36,6 +47,7 @@ module.exports = function({
 		  ROUND_RESTART_TIME = 5000,
 		  NOT_ENOUGH_PLAYERS_ROUND_END_TIMEOUT = 5000,
 		  ENOUGH_PLAYER_COUNT = 2,
+		  ROUND_PLAY_TIME_AFTER_FIRST_USER_WON = 10000,
       } = {}
 } = {}){
 	function log(action$, state$){
@@ -130,10 +142,22 @@ module.exports = function({
 				delay(NOT_ENOUGH_PLAYERS_ROUND_END_TIMEOUT),
 				// if we got enough time before the delay, cancel
 				takeUntil(action$.pipe(ofType(ActionTypes.HAVE_ENOUGH_PLAYERS))),
+				// cancel if a new round starts
+				takeUntil(action$.pipe(ofType(ActionTypes.ROUND_END_SUCCESS))),
+			))
+		);
+		const userWonRound$ = action$.pipe(
+			ofType(ActionTypes.RIGHT_ANSWER_FOUND),
+			distinct(null, action$.pipe(ofType(ActionTypes.ROUND_END_SUCCESS))),
+			switchMap(() => of(null).pipe(
+				// give some time to other users
+				delay(ROUND_PLAY_TIME_AFTER_FIRST_USER_WON),
+				// cancel if a new round starts
+				takeUntil(action$.pipe(ofType(ActionTypes.ROUND_END_SUCCESS))),
 			))
 		);
 
-		return merge(gameEnd$, notEnoughPlayers$).pipe(
+		return merge(gameEnd$, notEnoughPlayers$, userWonRound$).pipe(
 			map(() => actions.createRoundEndRequest())
 		);
 	}
@@ -166,6 +190,70 @@ module.exports = function({
 		);
 	}
 
+	function leaderboardUpdate(action$){
+		return action$.pipe(
+			ofType(
+				ActionTypes.ROUND_START_SUCCESS,
+				ActionTypes.ROUND_END_SUCCESS,
+				ActionTypes.ADD_USER_LEADERBOARD_POINTS
+			),
+			map(() => actions.createLeaderboardUpdate())
+		);
+	}
+
+	function hatchPercentageUser(action$, state$){
+		return action$.pipe(
+			ofType(ActionTypes.WRONG_ANSWER_FOUND),
+			withLatestFrom(state$),
+			map(([{ payload: { userId } }, state]) => {
+				const user = state.getIn(['users', userId]);
+				const percentage = (100 / HATCH_LIMIT) * (HATCH_LIMIT - (user.get('hatch') || 0));
+
+				return actions.createUserHatchPercentage(userId, percentage);
+			})
+		);
+	}
+
+	function refreshHatch(action$){
+		return action$.pipe(
+			ofType(ActionTypes.ROUND_START_SUCCESS),
+			map(() => actions.createRefreshUsersHatch(HATCH_LIMIT))
+		);
+	}
+
+	// when the user answer correctly or wrong, create appropriate actions
+	function handleAnswer(action$, state$){
+		return action$.pipe(
+			ofType(ActionTypes.SOCKET_USER_SAY),
+			withLatestFrom(state$),
+			mergeMap((result) => of(result).pipe(
+				mergeMap(([{ payload: { userId, message } }, state]) => {
+					if(
+						state.get('state') !== GameState.ROUND_IN_PROGRESS
+						|| userId === state.getIn(['roundState', 'teller'])
+						|| state.hasIn(['foundRight', userId])
+					){
+						return NEVER;
+					}
+
+					const user = state.getIn(['users', userId]);
+
+					if(checkAnswer(message, state.getIn(['roundState', 'answer']))){
+						return from([
+							createUserRightAnswerAddPointsAction(user),
+							actions.createRightAnswerFound(userId)
+						]);
+					}else{
+						return from([
+							actions.createWrongAnswerFound(userId)
+						]);
+					}
+				}),
+				catchError(() => { return NEVER; })
+			))
+		);
+	}
+
 	return combineEpics(
 		log,
 		init,
@@ -177,5 +265,9 @@ module.exports = function({
 		roundEnd,
 		haveEnoughPlayers,
 		userDisconnected,
+		leaderboardUpdate,
+		hatchPercentageUser,
+		refreshHatch,
+		handleAnswer,
 	);
 };

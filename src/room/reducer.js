@@ -10,6 +10,7 @@ const INITIAL_STATE = Map({
 	},
 	users: Map({}),
 	leaderboard: Map({}),
+	foundRight: Map({}),
 	createdAt: null,
 	lastRoundStartedAt: null,
 	lastRoundEndedAt: null,
@@ -25,8 +26,8 @@ module.exports = function(state = INITIAL_STATE, action){
 			const { user } = action.payload;
 
 			return state
-				.setIn(['users', user.id], user)
-				.setIn(['leaderboard', user.id], 0);
+				.setIn(['users', user.get('id')], user)
+				.setIn(['leaderboard', user.get('id')], 0);
 		}
 		case ActionTypes.ROUND_START_SUCCESS: {
 			const { answer, teller } = action.payload;
@@ -35,12 +36,15 @@ module.exports = function(state = INITIAL_STATE, action){
 				state: GameState.ROUND_IN_PROGRESS,
 				round: state.get('round') + 1,
 				roundState: Map({ answer, teller }),
-				lastRoundStartedAt: Date.now()
+				foundRight: Map({}),
+				lastRoundStartedAt: Date.now(),
 			});
 		}
 		case ActionTypes.ROUND_END_SUCCESS: {
 			return state.merge({
 				state: GameState.ROUND_FINISHED,
+				roundState: Map({ answer: null, teller: null }),
+				lastRoundEndedAt: Date.now(),
 			});
 		}
 		case ActionTypes.ROUND_END_STATE_WAIT_COMPLETED: {
@@ -52,6 +56,28 @@ module.exports = function(state = INITIAL_STATE, action){
 			return state
 				.removeIn(['users', userId])
 				.removeIn(['leaderboard', userId]);
+		}
+		case ActionTypes.RIGHT_ANSWER_FOUND: {
+			const { userId } = action.payload;
+
+			return state.setIn(['foundRight', userId], Map({ time: Date.now() }));
+		}
+		case ActionTypes.ADD_USER_LEADERBOARD_POINTS: {
+			const { userId, points } = action.payload;
+			const oldPoints = state.getIn(['leaderboard', userId]) || 0;
+
+			return state.setIn(['leaderboard', userId], oldPoints + points);
+		}
+		case ActionTypes.WRONG_ANSWER_FOUND: {
+			const { userId } = action.payload;
+			const oldHatch = state.getIn(['users', userId, 'hatch']) || 0;
+
+			return state.setIn(['users', userId, 'hatch'], Math.max(oldHatch - 1, 0));
+		}
+		case ActionTypes.REFRESH_USERS_HATCH: {
+			const { hatch } = action.payload;
+
+			return state.update('users', users => users.map(user => user.set('hatch', hatch)));
 		}
 	}
 	return state;

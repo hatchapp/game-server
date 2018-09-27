@@ -56,6 +56,30 @@ function createRoundEndStateWaitCompleted(){
 	return { type: ActionTypes.ROUND_END_STATE_WAIT_COMPLETED };
 }
 
+function createRightAnswerFound(userId){
+	return { type: ActionTypes.RIGHT_ANSWER_FOUND, payload: { userId } };
+}
+
+function createLeaderboardUpdate(){
+	return { type: ActionTypes.LEADERBOARD_UPDATE };
+}
+
+function createAddUserLeaderboardPoints(userId, points){
+	return { type: ActionTypes.ADD_USER_LEADERBOARD_POINTS, payload: { userId, points } };
+}
+
+function createWrongAnswerFound(userId){
+	return { type: ActionTypes.WRONG_ANSWER_FOUND, payload: { userId } };
+}
+
+function createUserHatchPercentage(userId, hatchPercentage){
+	return { type: ActionTypes.USER_HATCH_PERCENTAGE, payload: { userId, hatchPercentage } };
+}
+
+function createRefreshUsersHatch(hatch){
+	return { type: ActionTypes.REFRESH_USERS_HATCH, payload: { hatch } };
+}
+
 module.exports = {
 	createSocketUserConnected,
 	createSocketUserSay,
@@ -71,4 +95,10 @@ module.exports = {
 	createRoundEndFailed,
 	createUserDisconnected,
 	createRoundEndStateWaitCompleted,
+	createRightAnswerFound,
+	createLeaderboardUpdate,
+	createAddUserLeaderboardPoints,
+	createWrongAnswerFound,
+	createUserHatchPercentage,
+	createRefreshUsersHatch,
 };

@@ -18,7 +18,7 @@ function createActionToEmitMapper({ id }){
 	return {
 		// simple example of emitting socket events on game actions
 		[ActionTypes.USER_CONNECTED]: (data) => of(data).pipe(
-			filter(({ user }) => user.id !== id),
+			filter(({ user }) => user.get('id') !== id),
 			map((data) => ({ event: EVENTS.ANOTHER_USER_CONNECTED, data }))
 		),
 		// say messages should be broadcast to all users
