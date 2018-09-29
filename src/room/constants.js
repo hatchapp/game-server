@@ -1,4 +1,4 @@
-const { mapObjectKeysToValues } = require('../utils');
+const { mapObjectKeysToValues } = require('./utils');
 
 module.exports = {
 	ActionTypes: {
@@ -22,13 +22,23 @@ module.exports = {
 		LEADERBOARD_UPDATE: 18,
 		USER_HATCH_PERCENTAGE: 19,
 		REFRESH_USERS_HATCH: 20,
+		TELLER_PICK_ANSWER_SUCCESS: 28,
+		TELLER_PICK_ANSWER_FAILED: 29,
+		ROUND_IN_PROGRESS_REQUEST: 24,
+		ROUND_IN_PROGRESS_SUCCESS: 25,
+		ROUND_IN_PROGRESS_FAILED: 26,
+		SOCKET_USER_PICK_ANSWER: 27,
+		AUTOMATIC_TELLER_PICK_ANSWER_REQUEST: 28,
 	},
 	GameState: {
 		IDLE: 0,
-		ROUND_IN_PROGRESS: 1,
-		ROUND_FINISHED: 2,
+		ROUND_PICK_ANSWER: 1,
+		ROUND_IN_PROGRESS: 2,
+		ROUND_FINISHED: 3,
 	},
-	Answers: ['geyik', 'kuzuların sessizliği', 'yerli malı', 'yahşi batı'],
+	Symbols: {
+		SYSTEM: Symbol('@@system'),
+	}
 };
 
 module.exports.ActionTypes = mapObjectKeysToValues(module.exports.ActionTypes);

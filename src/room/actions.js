@@ -1,4 +1,4 @@
-const { ActionTypes } = require('./constants');
+const { ActionTypes, Symbols } = require('./constants');
 
 function createSocketUserConnected(userId){
 	return { type: ActionTypes.SOCKET_USER_CONNECTED, payload: { userId } };
@@ -24,8 +24,8 @@ function createRoundStartRequest(){
 	return { type: ActionTypes.ROUND_START_REQUEST };
 }
 
-function createRoundStartSuccess(answer, teller){
-	return { type: ActionTypes.ROUND_START_SUCCESS, payload: { answer, teller } };
+function createRoundStartSuccess(categories, teller){
+	return { type: ActionTypes.ROUND_START_SUCCESS, payload: { categories, teller } };
 }
 
 function createRoundStartFailed(){
@@ -68,8 +68,8 @@ function createAddUserLeaderboardPoints(userId, points){
 	return { type: ActionTypes.ADD_USER_LEADERBOARD_POINTS, payload: { userId, points } };
 }
 
-function createWrongAnswerFound(userId){
-	return { type: ActionTypes.WRONG_ANSWER_FOUND, payload: { userId } };
+function createWrongAnswerFound(userId, message, time){
+	return { type: ActionTypes.WRONG_ANSWER_FOUND, payload: { userId, message, time } };
 }
 
 function createUserHatchPercentage(userId, hatchPercentage){
@@ -78,6 +78,34 @@ function createUserHatchPercentage(userId, hatchPercentage){
 
 function createRefreshUsersHatch(hatch){
 	return { type: ActionTypes.REFRESH_USERS_HATCH, payload: { hatch } };
+}
+
+function createSocketUserPickAnswer(userId, categoryId, time){
+	return { type: ActionTypes.SOCKET_USER_PICK_ANSWER, payload: { userId, categoryId, time } };
+}
+
+function createAutomaticTellerPickAnswerRequest(categoryId){
+	return { type: ActionTypes.AUTOMATIC_TELLER_PICK_ANSWER_REQUEST, payload: { userId: Symbols.SYSTEM, time: Date.now(), categoryId } };
+}
+
+function createTellerPickAnswerSuccess(userId, categoryId, time){
+	return { type: ActionTypes.TELLER_PICK_ANSWER_SUCCESS, payload: { userId, categoryId, time } };
+}
+
+function createTellerPickAnswerFailed(userId){
+	return { type: ActionTypes.TELLER_PICK_ANSWER_FAILED, payload: { userId } };
+}
+
+function createRoundInProgressRequest(){
+	return { type: ActionTypes.ROUND_IN_PROGRESS_REQUEST };
+}
+
+function createRoundInProgressSuccess(answer){
+	return { type: ActionTypes.ROUND_IN_PROGRESS_SUCCESS, payload: { answer } };
+}
+
+function createRoundInProgressFailed(){
+	return { type: ActionTypes.ROUND_IN_PROGRESS_FAILED };
 }
 
 module.exports = {
@@ -101,4 +129,11 @@ module.exports = {
 	createWrongAnswerFound,
 	createUserHatchPercentage,
 	createRefreshUsersHatch,
+	createSocketUserPickAnswer,
+	createAutomaticTellerPickAnswerRequest,
+	createTellerPickAnswerSuccess,
+	createTellerPickAnswerFailed,
+	createRoundInProgressRequest,
+	createRoundInProgressSuccess,
+	createRoundInProgressFailed,
 };

@@ -15,16 +15,16 @@ module.exports = function(){
 		games[id] = room;
 	}
 
-	function createRoom(id){
+	function createRoom(id, dependencies){
 		const initialState = undefined;
-		return roomCreator(id, initialState);
+		return roomCreator(id, dependencies, initialState);
 	}
 
-	async function getOrCreateRoom(id){
+	async function getOrCreateRoom(id, dependencies){
 		// if the room exists, just return it
 		if(hasGame(id)) return getRoom(id);
 
-		const room = createRoom(id);
+		const room = createRoom(id, dependencies);
 		setRoom(id, room);
 		return room;
 	}

@@ -1,3 +1,5 @@
+# ignore the real movie database, which is big
+data/movies.json
 # intellij idea gitignore
 .idea
 # Logs

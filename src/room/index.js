@@ -4,15 +4,16 @@ const { createEpicMiddleware, combineEpics } = require('redux-observable');
 const roomEpicCreator = require('./epics');
 const rootReducer = require('./reducer');
 
-module.exports = function(id, initialState){
+module.exports = function(id, { MovieDatabaseCreator }, initialState){
 	const result = {};
+	const MovieDatabase = MovieDatabaseCreator.create();
 
 	function stealMiddleware(action$, state$){
 		Object.assign(result, { action$, state$ });
 		return NEVER;
 	}
 
-	const roomEpic = roomEpicCreator({ id });
+	const roomEpic = roomEpicCreator({ id, MovieDatabase });
 	const epicMiddleware = createEpicMiddleware();
 	const rootEpic = combineEpics(roomEpic, stealMiddleware);
 	const store = createStore(

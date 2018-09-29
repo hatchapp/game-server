@@ -13,5 +13,7 @@ module.exports = {
 		LEADERBOARD_UPDATE: 'leaderboard_update',
 		SAY: 'say',
 		TELL: 'tell',
+		PICK_ANSWER: 'pick_answer',
+		CHOOSE_CATEGORY: 'choose_category',
 	},
 };

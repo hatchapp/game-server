@@ -1,9 +1,9 @@
-const { Subject, Observable, merge, of } = require('rxjs');
+const { Subject, Observable, merge, NEVER, of } = require('rxjs');
 const { filter, map, mergeMap, withLatestFrom } = require('rxjs/operators');
 const { EVENTS } = require('./constants');
 const { ActionTypes } = require('../room/constants');
 const roomActions = require('../room/actions');
-const { streamSwitchCase } = require('./util');
+const { streamSwitchCase } = require('./utils');
 
 function createEventToActionMapper({ id }){
 	return {
@@ -11,6 +11,7 @@ function createEventToActionMapper({ id }){
 		'register': () => roomActions.createSocketUserConnected(id),
 		'unregister': () => roomActions.createSocketUserDisconnected(id),
 		[EVENTS.SAY]: ({ say, date }) => roomActions.createSocketUserSay(id, say, date),
+		[EVENTS.PICK_ANSWER]: ({ category, date }) => roomActions.createSocketUserPickAnswer(id, category, date),
 	};
 }
 
@@ -44,13 +45,18 @@ function createActionToEmitMapper({ id }){
 		},
 		// say messages should be broadcast to all users
 		[ActionTypes.SOCKET_USER_SAY]: ({ userId, message, time }, state) => {
-			const isTeller = state.getIn(['roundState', 'teller']) === userId;
+			if(state.getIn(['roundState', 'teller']) !== userId)
+				return NEVER;
 
 			return {
-				event: isTeller ? EVENTS.TELL : EVENTS.ANSWER,
-				data: { userId, time, [isTeller ? 'tell' : 'answer']: message },
+				event: EVENTS.TELL,
+				data: { userId, time, tell: message },
 			};
 		},
+		[ActionTypes.WRONG_ANSWER_FOUND]: ({ userId, message, time }) => ({
+			event: EVENTS.ANSWER,
+			data: { userId, time, answer: message }
+		}),
 		[ActionTypes.USER_HATCH_PERCENTAGE]: ({ userId, hatchPercentage }) => ({
 			event: EVENTS.HATCH_STATUS,
 			data: { userId, hatchPercentage },
@@ -61,14 +67,26 @@ function createActionToEmitMapper({ id }){
 		}),
 		[ActionTypes.ROUND_START_SUCCESS]: (_, state) => {
 			const teller = state.getIn(['roundState', 'teller']);
-			const answer = state.getIn(['roundState', 'answer']);
+			const categories = state.getIn(['pickState', 'categories']).valueSeq().toArray();
 
 			return [
 				{ event: EVENTS.ROUND_START },
-				...(teller === id ? [{ event: EVENTS.TELL_ANSWER, data: { answer } }] : [])
+				...(teller === id ? [{ event: EVENTS.CHOOSE_CATEGORY, data: { categories } }] : [])
 			];
 		},
-		[ActionTypes.ROUND_END_SUCCESS]: () => ({ event: EVENTS.ROUND_END }),
+		[ActionTypes.ROUND_IN_PROGRESS_SUCCESS]: (_, state) => {
+			if(id !== state.getIn(['roundState', 'teller']))
+				return NEVER;
+
+			return {
+				event: EVENTS.TELL_ANSWER,
+				data: state.getIn(['roundState', 'answer'])
+			};
+		},
+		[ActionTypes.ROUND_END_SUCCESS]: (_, state) => ({
+			event: EVENTS.ROUND_END,
+			data: { answer: state.getIn(['roundState', 'answer']) }
+		}),
 		[ActionTypes.LEADERBOARD_UPDATE]: (_, state) => ({
 			event: EVENTS.LEADERBOARD_UPDATE,
 			data: { leaderboard: state.get('leaderboard').toJS() },

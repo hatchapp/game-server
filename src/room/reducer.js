@@ -1,13 +1,20 @@
 const { Map } = require('immutable');
 const { ActionTypes, GameState } = require('./constants');
+const { getTitles } = require('./utils');
+
 const INITIAL_STATE = Map({
 	id: null,
 	state: GameState.IDLE,
 	round: 0,
-	roundState: {
+	roundState: Map({
 		answer: null,
+		titles: null,
 		teller: null,
-	},
+	}),
+	pickState: Map({
+		categories: null,
+		picked: null,
+	}),
 	users: Map({}),
 	leaderboard: Map({}),
 	foundRight: Map({}),
@@ -30,20 +37,33 @@ module.exports = function(state = INITIAL_STATE, action){
 				.setIn(['leaderboard', user.get('id')], 0);
 		}
 		case ActionTypes.ROUND_START_SUCCESS: {
-			const { answer, teller } = action.payload;
+			const { categories, teller } = action.payload;
 
 			return state.merge({
-				state: GameState.ROUND_IN_PROGRESS,
+				state: GameState.ROUND_PICK_ANSWER,
 				round: state.get('round') + 1,
-				roundState: Map({ answer, teller }),
+				roundState: Map({ teller, answer: null, titles: null }),
+				pickState: Map({ categories, picked: null }),
 				foundRight: Map({}),
 				lastRoundStartedAt: Date.now(),
 			});
 		}
+		case ActionTypes.TELLER_PICK_ANSWER_SUCCESS: {
+			const { categoryId } = action.payload;
+
+			return state
+				.update('pickState', (pickState) => pickState.set('picked', categoryId));
+		}
+		case ActionTypes.ROUND_IN_PROGRESS_SUCCESS: {
+			const { answer } = action.payload;
+
+			return state
+				.set('state', GameState.ROUND_IN_PROGRESS)
+				.update('roundState', (roundState) => roundState.set('answer', answer).set('titles', getTitles(answer.toJS())));
+		}
 		case ActionTypes.ROUND_END_SUCCESS: {
 			return state.merge({
 				state: GameState.ROUND_FINISHED,
-				roundState: Map({ answer: null, teller: null }),
 				lastRoundEndedAt: Date.now(),
 			});
 		}

@@ -3,7 +3,9 @@ const { from, merge, NEVER, of, throwError } = require('rxjs');
 const { catchError, delay, distinct, filter, map, mergeMap, switchMap, takeUntil, withLatestFrom } = require('rxjs/operators');
 const { combineEpics, ofType } = require('redux-observable');
 const actions = require('./actions');
-const { ActionTypes, Answers, GameState } = require('./constants');
+const { ActionTypes, GameState, Symbols } = require('./constants');
+const { CategoryTypes } = require('../answers/constants');
+const { cleanAnswerText, pickRandom } = require('./utils');
 
 function createUser(id, hatchLimit) {
 	return Map({
@@ -14,18 +16,36 @@ function createUser(id, hatchLimit) {
 	});
 }
 
-function pickTeller(users){
-	return users[Math.floor(Math.random() * users.length)];
+function pickCategoriesToSelectFrom(MovieDatabase){
+	return from(Promise.all([
+		MovieDatabase.getRandomCategories(2, CategoryTypes.GENRE),
+		MovieDatabase.getRandomCategories(1, CategoryTypes.DIRECTOR),
+	]).then(arr => arr.reduce((acc, a) => acc.concat(a), [])));
 }
 
-function pickAnswer(){
-	return Answers[Math.floor(Math.random() * Answers.length)];
+function createNewRoundActionStream(state, MovieDatabase){
+	const category$ = pickCategoriesToSelectFrom(MovieDatabase);
+
+	return category$.pipe(
+		map((categories) => {
+			return actions.createRoundStartSuccess(
+				categories.reduce((acc, category) => acc.set(category.id, category), Map({})),
+				pickRandom(state.get('users').keySeq().toArray())
+			);
+		}),
+	);
 }
 
-function createNewRoundAction(state){
-	return actions.createRoundStartSuccess(
-		pickAnswer(),
-		pickTeller(state.get('users').keySeq().toArray())
+function pickAnswer(categoryId, MovieDatabase){
+	return from(MovieDatabase.getRandomAnswerForCategory(categoryId)).pipe(map(Map));
+}
+
+function createRoundInProgressActionStream(state, MovieDatabase){
+	const categoryId = state.getIn(['pickState', 'picked']);
+	const answer$ = pickAnswer(categoryId, MovieDatabase);
+
+	return answer$.pipe(
+		map((answer) => actions.createRoundInProgressSuccess(answer)),
 	);
 }
 
@@ -35,12 +55,18 @@ function createUserRightAnswerAddPointsAction(user){
 	return actions.createAddUserLeaderboardPoints(user.get('id'), Math.max(points, 0));
 }
 
-function checkAnswer(message, answer){
-	return message === answer;
+function checkForgive(message, title){
+	return message === title;
+}
+
+function checkAnswer(message, titles){
+	message = cleanAnswerText(message);
+	return titles.some((title) => checkForgive(message, title));
 }
 
 module.exports = function({
       id,
+	  MovieDatabase,
 	  gameConfig: {
       	  HATCH_LIMIT = 20,
 		  ROUND_PLAY_TIME = 90000,
@@ -48,6 +74,7 @@ module.exports = function({
 		  NOT_ENOUGH_PLAYERS_ROUND_END_TIMEOUT = 5000,
 		  ENOUGH_PLAYER_COUNT = 2,
 		  ROUND_PLAY_TIME_AFTER_FIRST_USER_WON = 10000,
+		  USER_ANSWER_PICK_TIME = 3000,
       } = {}
 } = {}){
 	function log(action$, state$){
@@ -113,9 +140,74 @@ module.exports = function({
 						return throwError(new Error('can not start a round when the game is not idle'));
 					if(state.get('users').size <= 1)
 						return throwError(new Error('you need at least one person to start a game'));
-					return of(createNewRoundAction(state));
+					return createNewRoundActionStream(state, MovieDatabase);
 				}),
 				catchError((err) => of(actions.createRoundStartFailed()))
+			))
+		);
+	}
+
+	function tellerPickAnswer(action$, state$){
+		return action$.pipe(
+			ofType(
+				ActionTypes.SOCKET_USER_PICK_ANSWER,
+				ActionTypes.AUTOMATIC_TELLER_PICK_ANSWER_REQUEST,
+			),
+			withLatestFrom(state$),
+			mergeMap((result) => of(result).pipe(
+				mergeMap(([{ payload: { userId, categoryId, time } }, state]) => {
+					if(state.get('state') !== GameState.ROUND_PICK_ANSWER)
+						return throwError(new Error('can not pick answer when the game state is not answer pick state'));
+					if(userId !== Symbols.SYSTEM && state.getIn(['roundState', 'teller']) !== userId)
+						return throwError(new Error('can not pick answer if you are not the teller'));
+					if(!state.hasIn(['pickState', 'categories', categoryId]))
+						return throwError(new Error('can not pick an category that is not an option for you'));
+					return of(actions.createTellerPickAnswerSuccess(userId, categoryId, time));
+				}),
+				catchError((err) => of(actions.createTellerPickAnswerFailed(result.payload.id)))
+			))
+		);
+	}
+
+	// automatically select answer category if the user does not select in given time
+	function autoSelectAnswer(action$, state$){
+		return action$.pipe(
+			ofType(ActionTypes.ROUND_START_SUCCESS),
+			withLatestFrom(state$),
+			switchMap((result) => {
+				return of(result).pipe(
+					delay(USER_ANSWER_PICK_TIME),
+					takeUntil(action$.ofType(ActionTypes.TELLER_PICK_ANSWER_SUCCESS)),
+					map(([_, state]) => {
+						const categoryId = pickRandom(state.getIn(['pickState', 'categories']).keySeq().toArray());
+
+						return actions.createAutomaticTellerPickAnswerRequest(categoryId);
+					})
+				);
+			})
+		);
+	}
+
+	function roundInProgressRequest(action$){
+		return action$.pipe(
+			ofType(ActionTypes.TELLER_PICK_ANSWER_SUCCESS),
+			map(() => actions.createRoundInProgressRequest())
+		);
+	}
+
+	function roundInProgress(action$, state$){
+		return action$.pipe(
+			ofType(ActionTypes.ROUND_IN_PROGRESS_REQUEST),
+			withLatestFrom(state$),
+			mergeMap((result) => of(result).pipe(
+				mergeMap(([_, state]) => {
+					if(state.get('state') !== GameState.ROUND_PICK_ANSWER)
+						return throwError(new Error('can not start a round when the game is not in pick answer state'));
+					if(state.get('users').size <= 1)
+						return throwError(new Error('you need at least one person to go in progress'));
+					return createRoundInProgressActionStream(state, MovieDatabase);
+				}),
+				catchError((err) => of(actions.createRoundInProgressFailed()))
 			))
 		);
 	}
@@ -169,7 +261,7 @@ module.exports = function({
 			withLatestFrom(state$),
 			mergeMap((result) => of(result).pipe(
 				mergeMap(([_, state]) => {
-					if(state.get('state') !== GameState.ROUND_IN_PROGRESS)
+					if(!([GameState.ROUND_PICK_ANSWER, GameState.ROUND_IN_PROGRESS].includes(state.get('state'))))
 						return throwError(new Error('can not end a round when the game is not round in progress state'));
 					return of(actions.createRoundEndSuccess());
 				}),
@@ -227,7 +319,7 @@ module.exports = function({
 			ofType(ActionTypes.SOCKET_USER_SAY),
 			withLatestFrom(state$),
 			mergeMap((result) => of(result).pipe(
-				mergeMap(([{ payload: { userId, message } }, state]) => {
+				mergeMap(([{ payload: { userId, message, time } }, state]) => {
 					if(
 						state.get('state') !== GameState.ROUND_IN_PROGRESS
 						|| userId === state.getIn(['roundState', 'teller'])
@@ -238,14 +330,14 @@ module.exports = function({
 
 					const user = state.getIn(['users', userId]);
 
-					if(checkAnswer(message, state.getIn(['roundState', 'answer']))){
+					if(checkAnswer(message, state.getIn(['roundState', 'titles']))){
 						return from([
 							createUserRightAnswerAddPointsAction(user),
 							actions.createRightAnswerFound(userId)
 						]);
 					}else{
 						return from([
-							actions.createWrongAnswerFound(userId)
+							actions.createWrongAnswerFound(userId, message, time)
 						]);
 					}
 				}),
@@ -269,5 +361,9 @@ module.exports = function({
 		hatchPercentageUser,
 		refreshHatch,
 		handleAnswer,
+		tellerPickAnswer,
+		autoSelectAnswer,
+		roundInProgressRequest,
+		roundInProgress,
 	);
 };
