@@ -28,6 +28,23 @@ function formatRoomState(room){
 	};
 }
 
+function getTeller(state){
+	return state.getIn(['roundState', 'teller']);
+}
+
+function createChooseCategoryEvent(state){
+	const categories = state.getIn(['pickState', 'categories']).valueSeq().toArray();
+
+	return { event: EVENTS.CHOOSE_CATEGORY, data: { categories } };
+}
+
+function createTellAnswerEvent(state){
+	return {
+		event: EVENTS.TELL_ANSWER,
+		data: state.getIn(['roundState', 'answer'])
+	};
+}
+
 function createActionToEmitMapper({ id }){
 	return {
 		// simple example of emitting socket events on game actions
@@ -37,10 +54,23 @@ function createActionToEmitMapper({ id }){
 			if(user.get('id') !== id){
 				return { event: EVENTS.ANOTHER_USER_CONNECTED, data };
 			}else{
-				return {
+				const isTeller = getTeller(state) === id;
+				const gameState = state.get('state');
+
+				const connectedEvent = {
 					event: EVENTS.ROOM_CONNECTED,
 					data: { room: formatRoomState(state.toJS()) }
 				};
+
+				if(!isTeller) return connectedEvent;
+
+				if(gameState === GameState.ROUND_PICK_ANSWER){
+					return [connectedEvent, createChooseCategoryEvent(state)];
+				}else if(gameState === GameState.ROUND_IN_PROGRESS){
+					return [connectedEvent, createTellAnswerEvent(state)];
+				}else{
+					return connectedEvent;
+				}
 			}
 		},
 		// say messages should be broadcast to all users
@@ -66,22 +96,18 @@ function createActionToEmitMapper({ id }){
 			data: { userId }
 		}),
 		[ActionTypes.ROUND_START_SUCCESS]: (_, state) => {
-			const teller = state.getIn(['roundState', 'teller']);
-			const categories = state.getIn(['pickState', 'categories']).valueSeq().toArray();
+			const teller = getTeller(state);
 
 			return [
 				{ event: EVENTS.ROUND_START },
-				...(teller === id ? [{ event: EVENTS.CHOOSE_CATEGORY, data: { categories } }] : [])
+				...(teller === id ? [createChooseCategoryEvent(state)] : [])
 			];
 		},
 		[ActionTypes.ROUND_IN_PROGRESS_SUCCESS]: (_, state) => {
 			if(id !== state.getIn(['roundState', 'teller']))
 				return NEVER;
 
-			return {
-				event: EVENTS.TELL_ANSWER,
-				data: state.getIn(['roundState', 'answer'])
-			};
+			return createTellAnswerEvent(state);
 		},
 		[ActionTypes.ROUND_END_SUCCESS]: (_, state) => ({
 			event: EVENTS.ROUND_END,
