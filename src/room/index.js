@@ -24,5 +24,5 @@ module.exports = function(id, { MovieDatabaseCreator }, initialState){
 
 	epicMiddleware.run(rootEpic);
 
-	return Object.assign(result, { dispatch: store.dispatch });
+	return Object.assign(result, { dispatch: store.dispatch, meta: { id } });
 };

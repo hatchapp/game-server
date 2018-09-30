@@ -6,4 +6,7 @@ module.exports = {
 	answers: {
 		database_file: process.env.MOVIE_DATABASE_FILE || path.join(__dirname, '../data/sample.json'),
 	},
+	redis: {
+		url: process.env.REDIS_URL || 'redis://localhost:6379',
+	}
 };

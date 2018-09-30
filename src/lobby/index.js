@@ -1,7 +1,10 @@
+const { Subject } = require('rxjs');
 const roomCreator = require('../room/index');
 
 module.exports = function(){
 	const games = {};
+	const createRoom$ = new Subject();
+	const deleteRoom$ = new Subject();
 
 	function hasGame(id){
 		return id in games;
@@ -17,7 +20,9 @@ module.exports = function(){
 
 	function createRoom(id, dependencies){
 		const initialState = undefined;
-		return roomCreator(id, dependencies, initialState);
+		const room = roomCreator(id, dependencies, initialState);
+		createRoom$.next(room);
+		return room;
 	}
 
 	async function getOrCreateRoom(id, dependencies){
@@ -29,7 +34,19 @@ module.exports = function(){
 		return room;
 	}
 
+	async function deleteRoom(id){
+		if(!hasGame(id))
+			throw new Error('cannot delete a room that does not exist');
+
+		delete games[id];
+		deleteRoom$.next(id);
+		return true;
+	}
+
 	return {
 		getOrCreateRoom,
+		deleteRoom,
+		createRoom$,
+		deleteRoom$,
 	};
 };
