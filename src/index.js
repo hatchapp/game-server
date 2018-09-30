@@ -8,11 +8,11 @@ const { getAuth, getRoomId } = require('./socket/utils');
 const socketMapper = require('./socket/mapper');
 const Answers = require('./answers/index')(config.answers);
 const createSaveMapper = require('./saver/index');
+const createSupervisorMapper = require('./supervisor/index');
 
 function getRoomDeleted$(deleteRoom$, roomId){
 	return deleteRoom$.pipe(
 		filter(deletedRoomId => deletedRoomId === roomId),
-		mergeMap(() => throwError(new Error('room deleted'))),
 	);
 }
 
@@ -25,19 +25,34 @@ async function main(){
 	const persist = require('./redis')(config.redis);
 	// check connection to persist backend is okay
 	await persist.ping();
-	// create a mapper for saving room state
-	const saveMapper = createSaveMapper(persist);
 	// create a lobby instance with the persist layer
 	const lobby = require('./lobby/index')(persist);
+	// create a mapper for saving room state
+	const saveMapper = createSaveMapper(persist);
+	// create supervisor mapper for removing room when its not necessary anymore
+	const supervisorMapper = createSupervisorMapper(lobby);
 	// get a handle of room create/delete actions in the lobby
 	const { createRoom$, deleteRoom$ } = lobby;
 
 	// for each room created, add a room state saver
 	const saver$ = createRoom$.pipe(
-		mergeMap((room) => {
-			const { action$, state$, dispatch, meta } = room;
-			return saveMapper.register(action$, state$, dispatch, meta);
-		}),
+		mergeMap((room) => of(null).pipe(
+			mergeMap(() => {
+				const { action$, state$, dispatch, meta } = room;
+				return saveMapper.register(action$, state$, dispatch, meta);
+			}),
+			takeUntil(getRoomDeleted$(deleteRoom$, room.meta.id))
+		))
+	);
+
+	const supervisor$ = createRoom$.pipe(
+		mergeMap((room) => of(null).pipe(
+			mergeMap(() => {
+				const { action$, state$, dispatch, meta } = room;
+				return supervisorMapper.register(action$, state$, dispatch, meta);
+			}),
+			takeUntil(getRoomDeleted$(deleteRoom$, room.meta.id))
+		))
 	);
 
 	// connect each socket to an appropriate game room
@@ -56,7 +71,9 @@ async function main(){
 					distinctUntilChanged(),
 					// for each room change event, re-register to the room/game
 					switchMap((roomId) => {
-						const roomDeleted$ = getRoomDeleted$(deleteRoom$, roomId);
+						const roomDeleted$ = getRoomDeleted$(deleteRoom$, roomId).pipe(
+							mergeMap(() => throwError(new Error('room deleted'))),
+						);
 
 						const registered$ = from(
 							lobby.getOrCreateRoom(roomId, { MovieDatabaseCreator })
@@ -88,6 +105,7 @@ async function main(){
 
 	merge(
 		saver$,
+		supervisor$,
 		service$
 	).subscribe(() => null);
 	await listen();

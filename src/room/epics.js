@@ -398,6 +398,13 @@ module.exports = function({
 		);
 	}
 
+	function deleteRoom(action$, state$){
+		return action$.pipe(
+			ofType(ActionTypes.DELETE_ROOM_REQUEST),
+			map(() => actions.createDeleteRoomFinished())
+		);
+	}
+
 	return combineEpics(
 		log,
 		init,
@@ -420,5 +427,6 @@ module.exports = function({
 		resumeGame,
 		tellerLeftGame,
 		handleTellerLeftGame,
+		deleteRoom,
 	);
 };

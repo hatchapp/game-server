@@ -59,6 +59,7 @@ module.exports = function(persist){
 		if(!hasGame(id))
 			throw new Error('cannot delete a room that does not exist');
 
+		await persist.delRoom(id);
 		delete games[id];
 		deleteRoom$.next(id);
 		return true;

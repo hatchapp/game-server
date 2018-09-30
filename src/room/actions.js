@@ -116,6 +116,14 @@ function createTellerLeftGame(){
 	return { type: ActionTypes.TELLER_LEFT_GAME };
 }
 
+function createDeleteRoomRequest(){
+	return { type: ActionTypes.DELETE_ROOM_REQUEST };
+}
+
+function createDeleteRoomFinished(){
+	return { type: ActionTypes.DELETE_ROOM_FINISHED };
+}
+
 module.exports = {
 	createSocketUserConnected,
 	createSocketUserSay,
@@ -146,4 +154,6 @@ module.exports = {
 	createRoundInProgressFailed,
 	createResumeGameFromInitialState,
 	createTellerLeftGame,
+	createDeleteRoomRequest,
+	createDeleteRoomFinished,
 };
