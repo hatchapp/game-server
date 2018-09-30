@@ -13,17 +13,20 @@ module.exports = function(port){
 	const io = socketio(server);
 	const socket$ = new Subject();
 
-	io.on('connection', async function (socket) {
-		socket$.next(socket);
-	});
+	async function listen() {
+		io.on('connection', async function (socket) {
+			socket$.next(socket);
+		});
 
-	[server, io].forEach(target => {
-		target.on('error', (err) => socket$.error(err));
-		target.on('close', () => socket$.complete());
-	});
+		[server, io].forEach(target => {
+			target.on('error', (err) => socket$.error(err));
+			target.on('close', () => socket$.complete());
+		});
 
-	server.listen(port);
-	return socket$;
+		await server.listen(port);
+	}
+
+	return { socket$, listen };
 };
 
 

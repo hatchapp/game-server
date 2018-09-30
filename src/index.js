@@ -4,10 +4,8 @@ const bunyan = require('bunyan');
 const config = require('./config');
 const logger = bunyan.createLogger({ name: config.name });
 const { EVENTS } = require('./socket/constants');
-const socket$ = require('./socket/index')(config.port);
 const { getAuth, getRoomId } = require('./socket/utils');
 const socketMapper = require('./socket/mapper');
-const lobby = require('./lobby/index')();
 const Answers = require('./answers/index')(config.answers);
 const createSaveMapper = require('./saver/index');
 
@@ -19,10 +17,22 @@ function getRoomDeleted$(deleteRoom$, roomId){
 }
 
 async function main(){
+	// create the socket server
+	const { socket$, listen } = require('./socket/index')(config.port);
+	// create the movie answer backend
 	const MovieDatabaseCreator = await Answers.connect();
-	const saveMapper = createSaveMapper(config.redis);
+	// create a persist backend with redis
+	const persist = require('./redis')(config.redis);
+	// check connection to persist backend is okay
+	await persist.ping();
+	// create a mapper for saving room state
+	const saveMapper = createSaveMapper(persist);
+	// create a lobby instance with the persist layer
+	const lobby = require('./lobby/index')(persist);
+	// get a handle of room create/delete actions in the lobby
 	const { createRoom$, deleteRoom$ } = lobby;
 
+	// for each room created, add a room state saver
 	const saver$ = createRoom$.pipe(
 		mergeMap((room) => {
 			const { action$, state$, dispatch, meta } = room;
@@ -30,6 +40,7 @@ async function main(){
 		}),
 	);
 
+	// connect each socket to an appropriate game room
 	const service$ = socket$.pipe(
 		mergeMap((socket) => of(null).pipe(
 			mergeMap(() => {
@@ -79,6 +90,7 @@ async function main(){
 		saver$,
 		service$
 	).subscribe(() => null);
+	await listen();
 }
 
 main().catch((err) => console.log('err', err));

@@ -30,7 +30,7 @@ function createNewRoundActionStream(state, MovieDatabase){
 		map((categories) => {
 			return actions.createRoundStartSuccess(
 				categories.reduce((acc, category) => acc.set(category.id, category), Map({})),
-				pickRandom(state.get('users').keySeq().toArray())
+				pickRandom(state.get('online').keySeq().toArray())
 			);
 		}),
 	);
@@ -75,6 +75,7 @@ module.exports = function({
 		  ENOUGH_PLAYER_COUNT = 2,
 		  ROUND_PLAY_TIME_AFTER_FIRST_USER_WON = 10000,
 		  USER_ANSWER_PICK_TIME = 3000,
+		  WAIT_TELLER_BEFORE_ROUND_END = 10000,
       } = {}
 } = {}){
 	function log(action$, state$){
@@ -93,7 +94,7 @@ module.exports = function({
 		return action$.pipe(
 			ofType(ActionTypes.SOCKET_USER_CONNECTED),
 			withLatestFrom(state$),
-			filter(([_, state]) => state.get('users').size === ENOUGH_PLAYER_COUNT),
+			filter(([_, state]) => state.get('online').size === ENOUGH_PLAYER_COUNT),
 			map(() => actions.createHaveEnoughPlayers())
 		);
 	}
@@ -138,7 +139,7 @@ module.exports = function({
 				mergeMap(([_, state]) => {
 					if(state.get('state') !== GameState.IDLE)
 						return throwError(new Error('can not start a round when the game is not idle'));
-					if(state.get('users').size <= 1)
+					if(state.get('online').size <= 1)
 						return throwError(new Error('you need at least one person to start a game'));
 					return createNewRoundActionStream(state, MovieDatabase);
 				}),
@@ -203,7 +204,7 @@ module.exports = function({
 				mergeMap(([_, state]) => {
 					if(state.get('state') !== GameState.ROUND_PICK_ANSWER)
 						return throwError(new Error('can not start a round when the game is not in pick answer state'));
-					if(state.get('users').size <= 1)
+					if(state.get('online').size <= 1)
 						return throwError(new Error('you need at least one person to go in progress'));
 					return createRoundInProgressActionStream(state, MovieDatabase);
 				}),
@@ -228,7 +229,7 @@ module.exports = function({
 			ofType(ActionTypes.USER_DISCONNECTED),
 			withLatestFrom(state$),
 			// if the user drops to 1, we need to send round end request,
-			filter(([_, state]) => state.get('users').size === 1),
+			filter(([_, state]) => state.get('online').size === 1),
 			switchMap(() => of(null).pipe(
 				// give some chance because the room may get new connections
 				delay(NOT_ENOUGH_PLAYERS_ROUND_END_TIMEOUT),
@@ -346,6 +347,57 @@ module.exports = function({
 		);
 	}
 
+	function resumeGame(action$, state$){
+		return action$.pipe(
+			ofType(ActionTypes.RESUME_GAME_FROM_INITIAL_STATE),
+			withLatestFrom(state$),
+			mergeMap(([_, state]) => {
+				const gameState = state.get('state');
+				const hydrates = [];
+
+				if([GameState.ROUND_IN_PROGRESS, GameState.ROUND_PICK_ANSWER].includes(gameState)){
+					hydrates.push(actions.createTellerLeftGame());
+				}
+
+				if(gameState === GameState.ROUND_PICK_ANSWER){
+					const categories = state.getIn(['pickState', 'categories']);
+					const teller = state.getIn(['roundState', 'teller']);
+
+					hydrates.push(actions.createRoundStartSuccess(categories, teller));
+				}else if(gameState === GameState.ROUND_IN_PROGRESS){
+					const answer = state.getIn(['roundState', 'answer']);
+
+					hydrates.push(actions.createRoundInProgressSuccess(answer));
+				}else if(gameState === GameState.ROUND_FINISHED){
+					hydrates.push(actions.createRoundEndSuccess());
+				}
+
+				return from(hydrates);
+			}),
+		);
+	}
+
+	function tellerLeftGame(action$, state$) {
+		return action$.pipe(
+			ofType(ActionTypes.USER_DISCONNECTED),
+			withLatestFrom(state$),
+			filter(([{ payload: { userId } }, state]) => state.getIn(['roundState', 'teller']) === userId),
+			map(() => actions.createTellerLeftGame())
+		);
+	}
+
+	function handleTellerLeftGame(action$, state$){
+		return action$.pipe(
+			ofType(ActionTypes.TELLER_LEFT_GAME),
+			withLatestFrom(state$),
+			filter(([_, state]) => !state.hasIn(['online', state.getIn(['roundState', 'teller'])])),
+			switchMap(() => of(null).pipe(
+				delay(WAIT_TELLER_BEFORE_ROUND_END),
+				map(() => actions.createRoundEndRequest())
+			)),
+		);
+	}
+
 	return combineEpics(
 		log,
 		init,
@@ -365,5 +417,8 @@ module.exports = function({
 		autoSelectAnswer,
 		roundInProgressRequest,
 		roundInProgress,
+		resumeGame,
+		tellerLeftGame,
+		handleTellerLeftGame,
 	);
 };

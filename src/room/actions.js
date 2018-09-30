@@ -108,6 +108,14 @@ function createRoundInProgressFailed(){
 	return { type: ActionTypes.ROUND_IN_PROGRESS_FAILED };
 }
 
+function createResumeGameFromInitialState(){
+	return { type: ActionTypes.RESUME_GAME_FROM_INITIAL_STATE };
+}
+
+function createTellerLeftGame(){
+	return { type: ActionTypes.TELLER_LEFT_GAME };
+}
+
 module.exports = {
 	createSocketUserConnected,
 	createSocketUserSay,
@@ -136,4 +144,6 @@ module.exports = {
 	createRoundInProgressRequest,
 	createRoundInProgressSuccess,
 	createRoundInProgressFailed,
+	createResumeGameFromInitialState,
+	createTellerLeftGame,
 };

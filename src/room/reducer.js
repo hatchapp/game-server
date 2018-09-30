@@ -18,6 +18,7 @@ const INITIAL_STATE = Map({
 	users: Map({}),
 	leaderboard: Map({}),
 	foundRight: Map({}),
+	online: Map({}),
 	createdAt: null,
 	lastRoundStartedAt: null,
 	lastRoundEndedAt: null,
@@ -34,6 +35,7 @@ module.exports = function(state = INITIAL_STATE, action){
 
 			return state
 				.setIn(['users', user.get('id')], user)
+				.setIn(['online', user.get('id')], Date.now())
 				.setIn(['leaderboard', user.get('id')], 0);
 		}
 		case ActionTypes.ROUND_START_SUCCESS: {
@@ -73,9 +75,7 @@ module.exports = function(state = INITIAL_STATE, action){
 		case ActionTypes.USER_DISCONNECTED: {
 			const { userId } = action.payload;
 
-			return state
-				.removeIn(['users', userId])
-				.removeIn(['leaderboard', userId]);
+			return state.removeIn(['online', userId]);
 		}
 		case ActionTypes.RIGHT_ANSWER_FOUND: {
 			const { userId } = action.payload;
