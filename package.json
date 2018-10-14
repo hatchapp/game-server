@@ -1,7 +1,7 @@
 {
-  "name": "backend",
+  "name": "game-server",
   "version": "1.0.0",
-  "description": "A backend for the hatch app that lets you play story telling with friends with emojis",
+  "description": "Game server for the hatch app that lets you play story telling with friends with emojis",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -10,7 +10,7 @@
     "hatch",
     "the",
     "game",
-    "backend",
+    "server",
     "socket.io",
     "redis"
   ],
@@ -20,11 +20,13 @@
     "bunyan": "^1.8.12",
     "express": "^4.16.3",
     "immutable": "^3.8.2",
+    "node-docker-api": "^1.1.22",
     "redis": "^2.8.0",
     "redux": "^4.0.0",
     "redux-observable": "^1.0.0",
     "rxjs": "^6.3.2",
     "socket.io": "^2.1.1",
-    "socket.io-client": "^2.1.1"
+    "socket.io-client": "^2.1.1",
+    "swim-hashring": "^0.7.0"
   }
 }
