@@ -13,7 +13,7 @@ function cleanRoomState(savedState){
 	));
 }
 
-module.exports = function(persist){
+module.exports = function(persist, allocatedToMe){
 	const games = {};
 	const createRoom$ = new Subject();
 	const deleteRoom$ = new Subject();
@@ -31,6 +31,7 @@ module.exports = function(persist){
 	}
 
 	async function createRoom(id, dependencies){
+		if(!allocatedToMe(id)) throw new Error(`this lobby cannot create a room with an id of '${id}'`);
 		const savedState = await persist.getRoom(id).catch(() => null);
 		let room;
 
@@ -47,6 +48,7 @@ module.exports = function(persist){
 	}
 
 	async function getOrCreateRoom(id, dependencies){
+		if(!allocatedToMe(id)) throw new Error(`this lobby cannot have a room with an id of '${id}'`);
 		// if the room exists, just return it
 		if(hasGame(id)) return getRoom(id);
 
@@ -55,19 +57,26 @@ module.exports = function(persist){
 		return room;
 	}
 
-	async function deleteRoom(id){
+	async function deleteRoom(id, { deleteFromPersistence = true } = {}){
 		if(!hasGame(id))
 			throw new Error('cannot delete a room that does not exist');
 
-		await persist.delRoom(id);
+		if(deleteFromPersistence)
+			await persist.delRoom(id);
+
 		delete games[id];
 		deleteRoom$.next(id);
 		return true;
 	}
 
+	function getActiveRoomIds(){
+		return Object.keys(games);
+	}
+
 	return {
 		getOrCreateRoom,
 		deleteRoom,
+		getActiveRoomIds,
 		createRoom$,
 		deleteRoom$,
 	};

@@ -25,8 +25,10 @@ RUN rm -rf /application/node_modules
 # Copy the dependency installation from the builder image.
 COPY --from=builder /application/node_modules /application/node_modules
 
-# Indicate that we use 8080. Maybe configurable.
+# Socket server port
 EXPOSE 8080
+# Hashring port
+EXPOSE 7373
 
 # Start the application.
 CMD ["node", "/application/bin/index.js"]

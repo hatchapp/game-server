@@ -223,6 +223,7 @@ module.exports = function(socket, auth){
 
 			return function unsubscribe(){
 				// emit unregister action
+				// TODO: maybe not call unregister if the room is deleted???
 				outsideEvent$.next({ event: 'unregister' });
 				outsideEvent$.complete();
 

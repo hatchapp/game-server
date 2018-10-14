@@ -6,11 +6,11 @@ const config = require('./config');
 const settings = JSON.parse(process.argv[2] || '{}');
 const readline = require('readline');
 const { roomId, userId } = settings || {};
-const socket = socketio(`http://localhost:${config.port}`, {
+const socket = socketio(`http://localhost:${config.socket.port}`, {
 	query: { roomId, userId },
 });
 
-['connect', ...Object.keys(EVENTS).map((key) => EVENTS[key])].forEach((event) => {
+['connect', 'disconnect', ...Object.keys(EVENTS).map((key) => EVENTS[key])].forEach((event) => {
 	socket.on(event, function(){
 		logger.info({ event, args: [...arguments] }, 'event happened');
 	});

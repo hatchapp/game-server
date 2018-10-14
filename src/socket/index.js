@@ -26,7 +26,7 @@ module.exports = function(port){
 		await server.listen(port);
 	}
 
-	return { socket$, listen };
+	return { socket$, listen, io, server };
 };
 
 
