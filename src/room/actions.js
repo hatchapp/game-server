@@ -1,7 +1,7 @@
 const { ActionTypes, Symbols } = require('./constants');
 
-function createSocketUserConnected(userId){
-	return { type: ActionTypes.SOCKET_USER_CONNECTED, payload: { userId } };
+function createSocketUserConnected(userId, name, status, createdAt){
+	return { type: ActionTypes.SOCKET_USER_CONNECTED, payload: { userId, name, status, createdAt } };
 }
 
 function createSocketUserSay(userId, message, time){

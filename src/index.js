@@ -150,7 +150,7 @@ async function main(){
 	const service$ = socket$.pipe(
 		mergeMap((socket) => of(null).pipe(
 			mergeMap(() => {
-				const auth = getAuth(socket);
+				const auth = getAuth(socket, config.auth.secret);
 				const roomId = getRoomId(socket);
 				logger.info({ auth, roomId }, 'got socket');
 				const mapper = socketMapper(socket, auth);

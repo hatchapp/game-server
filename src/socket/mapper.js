@@ -5,10 +5,10 @@ const { ActionTypes } = require('../room/constants');
 const roomActions = require('../room/actions');
 const { streamSwitchCase } = require('./utils');
 
-function createEventToActionMapper({ id }){
+function createEventToActionMapper({ id, name, status, createdAt }){
 	return {
 		// register and unregister can be thought of as connect/disconnect
-		'register': () => roomActions.createSocketUserConnected(id),
+		'register': () => roomActions.createSocketUserConnected(id, name, status, createdAt),
 		'unregister': () => roomActions.createSocketUserDisconnected(id),
 		[EVENTS.SAY]: ({ say, date }) => roomActions.createSocketUserSay(id, say, date),
 		[EVENTS.PICK_ANSWER]: ({ category, date }) => roomActions.createSocketUserPickAnswer(id, category, date),

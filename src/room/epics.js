@@ -7,13 +7,8 @@ const { ActionTypes, GameState, Symbols } = require('./constants');
 const { CategoryTypes } = require('../answers/constants');
 const { cleanAnswerText, pickRandom } = require('./utils');
 
-function createUser(id, hatchLimit) {
-	return Map({
-		id,
-		name: `user#${Math.floor(Math.random() * 1000000)}`,
-		createdAt: Date.now(),
-		hatch: hatchLimit,
-	});
+function createUser(id, name, status, createdAt, hatch) {
+	return Map({ id, name, status, createdAt, hatch });
 }
 
 function pickCategoriesToSelectFrom(MovieDatabase){
@@ -103,8 +98,8 @@ module.exports = function({
 	function userConnected(action$){
 		return action$.pipe(
 			ofType(ActionTypes.SOCKET_USER_CONNECTED),
-			map(({ payload: { userId } }) => {
-				const user = createUser(userId, HATCH_LIMIT);
+			map(({ payload: { userId, name, status, createdAt } }) => {
+				const user = createUser(userId, name, status, createdAt, HATCH_LIMIT);
 
 				return actions.createUserConnected(user);
 			})
@@ -115,7 +110,7 @@ module.exports = function({
 	function userDisconnected(action$){
 		return action$.pipe(
 			ofType(ActionTypes.SOCKET_USER_DISCONNECTED),
-			map(({ payload: { userId} }) => actions.createUserDisconnected(userId))
+			map(({ payload: { userId } }) => actions.createUserDisconnected(userId))
 		);
 	}
 

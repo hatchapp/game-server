@@ -19,4 +19,7 @@ module.exports = {
 	socket: {
 		port: process.env.SOCKET_PORT || 8080,
 	},
+	auth: {
+		secret: process.env.JWT_SECRET || 'top-secret',
+	},
 };

@@ -1,7 +1,8 @@
 const { Observable, from, of, NEVER } = require('rxjs');
+const { verify } = require('jsonwebtoken');
 
-function getAuth(socket){
-	return { id: socket.id };
+function getAuth(socket, secret){
+	return verify(socket.handshake.query.token, secret);
 }
 
 function getRoomId(socket){
