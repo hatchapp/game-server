@@ -27,7 +27,6 @@ module.exports = function({ port, image, network, me, socketPath = '/var/run/doc
 			try {
 				// ignore this container itself
 				if(container.data.Id.startsWith(hostname)) return false;
-				const net = getNetwork(container, network);
 				return getImage(container) === image;
 			}catch(err){
 				return false;
