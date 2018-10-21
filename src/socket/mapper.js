@@ -17,14 +17,14 @@ function createEventToActionMapper({ id, name, status, createdAt }){
 
 function formatRoomState(room){
 	const {
-		id, state, round, roundState: { teller }, users,
+		id, state, round, roundState: { teller }, users, online,
 		leaderboard, foundRight, createdAt,
 		lastRoundStartedAt, lastRoundEndedAt
 	} = room;
 
 	return {
 		id, state, round, teller, createdAt, lastRoundStartedAt, lastRoundEndedAt,
-		users, leaderboard, foundRight
+		users, online, leaderboard, foundRight
 	};
 }
 
