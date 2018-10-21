@@ -1,5 +1,5 @@
 const { fromEvent, from, of, merge, NEVER, throwError } = require('rxjs');
-const { catchError, debounceTime, distinctUntilChanged, filter, map, mergeMap, startWith, switchMap, takeUntil } = require('rxjs/operators');
+const { catchError, debounceTime, distinctUntilChanged, filter, map, mergeMap, startWith, switchMap, takeUntil, withLatestFrom } = require('rxjs/operators');
 const bunyan = require('bunyan');
 const config = require('./config');
 const logger = bunyan.createLogger({ name: config.name });
@@ -172,8 +172,17 @@ async function main(){
 						).pipe(
 							mergeMap(function(room){
 								const { action$, state$, dispatch } = room;
-								return mapper.register(action$, state$, dispatch).pipe(
-									takeUntil(roomDeleted$)
+
+								return of(null).pipe(
+									withLatestFrom(state$),
+									mergeMap(([_, state]) => {
+										if(state.hasIn(['online', auth.id]))
+											throw new Error('this user is already online in this room');
+
+										return mapper.register(action$, state$, dispatch).pipe(
+											takeUntil(roomDeleted$)
+										);
+									})
 								);
 							}),
 						);
