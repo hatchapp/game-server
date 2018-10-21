@@ -1,7 +1,7 @@
 const { Subject, Observable, merge, NEVER, of } = require('rxjs');
 const { filter, map, mergeMap, withLatestFrom } = require('rxjs/operators');
 const { EVENTS } = require('./constants');
-const { ActionTypes } = require('../room/constants');
+const { ActionTypes, GameState } = require('../room/constants');
 const roomActions = require('../room/actions');
 const { streamSwitchCase } = require('./utils');
 
