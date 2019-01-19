@@ -4,8 +4,8 @@ const bunyan = require('bunyan');
 const config = require('./config');
 const logger = bunyan.createLogger({ name: config.name });
 const { EVENTS } = require('./socket/constants');
+const createSocketRegister = require('./socket/register');
 const { getAuth, getRoomId } = require('./socket/utils');
-const socketMapper = require('./socket/mapper');
 const Answers = require('./answers/index')(config.answers);
 const resolvers = require('./resolvers/index');
 const createSaveMapper = require('./saver/index');
@@ -47,41 +47,18 @@ function waitForHashring(ring){
 	});
 }
 
-function handleRingMove(ring, lobby){
+/**
+ * Given a ring, creates a stream out of its move actions
+ * @param ring
+ * @returns {Observable<*>}
+ */
+function createRingMoveStream(ring){
 	const move$ = fromEvent(ring, 'move');
-	const stop$ = merge(
-		fromEvent(ring, 'error'),
+	const err$ = fromEvent(ring, 'error').pipe(
+		mergeMap((err) => throwError(err))
 	);
 
-	return move$.pipe(
-		debounceTime(config.hashring.moveDebounce),
-		mergeMap(() => {
-			return from(lobby.getActiveRoomIds()).pipe(
-				filter((roomId) => !ring.allocatedToMe(roomId)),
-				mergeMap((roomId) =>
-					of(lobby.deleteRoom(roomId, { deleteFromPersistence: false })).pipe(
-						map(() => {
-							logger.info({ roomId }, 'deleted room');
-						}),
-						catchError((err) => {
-							logger.error(err, `an error happened when deleting room with id of '${roomId}'`);
-							return NEVER;
-						})
-					)
-				),
-			);
-		}),
-		takeUntil(stop$),
-	).subscribe(() => null);
-}
-
-function handleErrors(ring, io, server){
-	merge(
-		...[ring, io, server]
-			.map((part) => fromEvent(part, 'error'))
-	).subscribe(() => {
-		process.exit(-1);
-	});
+	return merge(move$, err$);
 }
 
 async function main(){
@@ -101,7 +78,7 @@ async function main(){
 	await waitForHashring(ring);
 	logger.info({ hashring: { port: config.hashring.port, base } }, 'connected to hashring');
 	// create the socket server
-	const { socket$, listen, io, server } = require('./socket/index')(config.socket.port);
+	const socket$ = require('./socket/server')(config.socket.port);
 	// create the movie answer backend
 	const MovieDatabaseCreator = await Answers.connect();
 	// create a persist backend with redis
@@ -118,10 +95,25 @@ async function main(){
 	const { createRoom$, deleteRoom$ } = lobby;
 
 	// make sure we remove rooms from the lobby when we are no longer handling them
-	handleRingMove(ring, lobby);
-
-	// handle errors that may happen on the critical parts of the system
-	handleErrors(ring, io, server);
+	const ringMoveHandle$ = createRingMoveStream(ring).pipe(
+		debounceTime(config.hashring.moveDebounce),
+		mergeMap(() => {
+			return from(lobby.getActiveRoomIds()).pipe(
+				filter((roomId) => !ring.allocatedToMe(roomId)),
+				mergeMap((roomId) =>
+					of(lobby.deleteRoom(roomId, { deleteFromPersistence: false })).pipe(
+						map(() => {
+							logger.info({ roomId }, 'deleted room');
+						}),
+						catchError((err) => {
+							logger.error(err, `an error happened when deleting room with id of '${roomId}'`);
+							return NEVER;
+						})
+					)
+				),
+			);
+		}),
+	);
 
 	// for each room created, add a room state saver
 	const saver$ = createRoom$.pipe(
@@ -153,7 +145,7 @@ async function main(){
 				const auth = getAuth(socket, config.auth.secret);
 				const roomId = getRoomId(socket);
 				logger.info({ auth, roomId }, 'got socket');
-				const mapper = socketMapper(socket, auth);
+				const socketRegister = createSocketRegister(auth);
 				const changeMap$ = fromEvent(socket, EVENTS.ROOM_CHANGE);
 				const disconnect$ = fromEvent(socket, 'disconnect');
 
@@ -179,7 +171,7 @@ async function main(){
 										if(state.hasIn(['online', auth.id]))
 											throw new Error('this user is already online in this room');
 
-										return mapper.register(action$, state$, dispatch).pipe(
+										return socketRegister(socket, action$, state$, dispatch).pipe(
 											takeUntil(roomDeleted$)
 										);
 									})
@@ -209,16 +201,19 @@ async function main(){
 		))
 	);
 
-	merge(
+	logger.info({ socket: { port: config.socket.port } }, 'starting the socket server');
+	return merge(
+		ringMoveHandle$,
 		saver$,
 		supervisor$,
 		service$
-	).subscribe(() => null);
-	await listen();
-	logger.info({ socket: { port: config.socket.port } }, 'started socket server');
+	).pipe(
+		catchError((err) => {
+			logger.error(err, 'main loop error');
+			process.exit(-1);
+		})
+	)
+	.subscribe(() => null);
 }
 
-main().catch((err) => {
-	logger.error(err, 'main loop error');
-	process.exit(-1);
-});
+main().catch((err) => logger.error(err, 'main start error'));
